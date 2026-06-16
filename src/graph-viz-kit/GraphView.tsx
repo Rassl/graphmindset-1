@@ -84,6 +84,11 @@ interface GraphViewProps {
    *  richer label at the node's position and the default one would double up.
    *  Unlike mutedNodeIds this also suppresses the hovered/selected label. */
   suppressLabelIds?: Set<number> | null;
+  /** Node index → image URL applied on top of (and falling back to) each node's
+   *  own imageUrl. Lets a node gain a zoom-in photo avatar from data that
+   *  arrived after the layout was built — e.g. a metro station enriched with
+   *  image_url on click — without rebuilding/reshuffling the graph. */
+  imageOverrides?: Map<number, string> | null;
 }
 
 const tmpObj = new THREE.Object3D();
@@ -602,7 +607,7 @@ function renderHighlightedLabel(label: string, term: string): React.ReactNode {
 }
 
 
-export function GraphView({ graph, viewState, onNodeClick, onHoverChange, minimap, whiteboardNodeId, onExitWhiteboard, onDetailNavigate, searchMatches, searchLabelMatches, topMatchRanks, searchTerm, pulses, recentNodes, expandedClusterId, layoutGeneration = 0, externalHoveredId, externalSelectedId, onGraphClick, nodeTypeIcons, onResetView, suppressHover, mutedNodeIds, suppressLabelIds }: GraphViewProps) {
+export function GraphView({ graph, viewState, onNodeClick, onHoverChange, minimap, whiteboardNodeId, onExitWhiteboard, onDetailNavigate, searchMatches, searchLabelMatches, topMatchRanks, searchTerm, pulses, recentNodes, expandedClusterId, layoutGeneration = 0, externalHoveredId, externalSelectedId, onGraphClick, nodeTypeIcons, onResetView, suppressHover, mutedNodeIds, suppressLabelIds, imageOverrides }: GraphViewProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const linesRef = useRef<THREE.LineSegments>(null);
   const highlightLinesRef = useRef<THREE.LineSegments>(null);
@@ -640,10 +645,10 @@ export function GraphView({ graph, viewState, onNodeClick, onHoverChange, minima
   const imageNodeIndices = useMemo(() => {
     const out: number[] = [];
     for (let i = 0; i < nodeCount; i++) {
-      if (graph.nodes[i].imageUrl) out.push(i);
+      if (graph.nodes[i].imageUrl || imageOverrides?.get(i)) out.push(i);
     }
     return out;
-  }, [graph, nodeCount]);
+  }, [graph, nodeCount, imageOverrides]);
 
   // Capacity rounds up to next 1000 — mesh is recreated only at these boundaries
   const meshCapacity = Math.ceil(Math.max(nodeCount, 1) / 1000) * 1000;
@@ -2507,7 +2512,8 @@ export function GraphView({ graph, viewState, onNodeClick, onHoverChange, minima
           label tick (see useFrame); this layer just renders the current set. */}
       {!minimap && avatarIds.map((i) => {
         const node = graph.nodes[i];
-        if (!node?.imageUrl) return null;
+        const avatarUrl = node?.imageUrl ?? imageOverrides?.get(i);
+        if (!node || !avatarUrl) return null;
         const i3 = i * 3;
         const lx = i3 + 2 < labelPos.length ? labelPos[i3] : targets.positions[i3];
         const ly = i3 + 2 < labelPos.length ? labelPos[i3 + 1] : targets.positions[i3 + 1];
@@ -2523,7 +2529,7 @@ export function GraphView({ graph, viewState, onNodeClick, onHoverChange, minima
             style={{ pointerEvents: "none", userSelect: "none" }}
           >
             <NodeAvatar
-              url={node.imageUrl}
+              url={avatarUrl}
               ring={colorForNodeType(node.nodeType)}
               dimmed={wbNodeId !== null && i !== wbNodeId}
               registerEl={(el) => {

@@ -1274,6 +1274,42 @@ export function GraphCanvas({ nodes, edges, schemas, onNodeSelect }: GraphCanvas
     return m
   }, [effectiveNodes])
 
+  // ref_id → station photo. The schematic bullets are positioned from the raw
+  // fixture (overlayNodes), which has no imagery; images only appear once a
+  // station is clicked and its backend detail (image_url) is merged into the
+  // store node by addNodes. Resolve that here off effectiveNodes so a clicked
+  // station's bullet can swap its flat fill for the photo.
+  const stationImages = useMemo(() => {
+    if (!metroEnabled) return null
+    const m = new Map<string, string>()
+    for (const n of effectiveNodes) {
+      if (n.node_type !== "Station") continue
+      const p = n.properties as Record<string, unknown>
+      const img =
+        (typeof p?.image_url === "string" && p.image_url) ||
+        (typeof p?.image === "string" && p.image) ||
+        (Array.isArray(p?.images) && typeof p.images[0] === "string"
+          ? (p.images[0] as string)
+          : "")
+      if (img) m.set(n.ref_id, img)
+    }
+    return m.size > 0 ? m : null
+  }, [effectiveNodes, metroEnabled])
+
+  // Same station photos, keyed by the node's index in the viz model, so the
+  // zoom-in NodeAvatar can reveal them. The graph isn't rebuilt when a station
+  // is enriched on click (would reshuffle the layout), so feed the image in as
+  // an override rather than baking it onto the node at build time.
+  const stationAvatarOverrides = useMemo(() => {
+    if (!stationImages) return null
+    const m = new Map<number, string>()
+    for (const [refId, url] of stationImages) {
+      const idx = refIdToIndex.get(refId)
+      if (idx !== undefined) m.set(idx, url)
+    }
+    return m.size > 0 ? m : null
+  }, [stationImages, refIdToIndex])
+
   // Metro stations are drawn by the dedicated schematic overlay (colored lines
   // + bullets), so their 3D graph glyph + label rest muted to avoid doubling
   // up and cluttering the overview. They stay interactive — hover/select
@@ -1715,13 +1751,37 @@ export function GraphCanvas({ nodes, edges, schemas, onNodeSelect }: GraphCanvas
     return out
   }, [hudSceneActive, selectedApiNode, effectiveEdges, effectiveNodeByRefId, refIdToIndex])
 
-  // The holo cards ARE the labels for these nodes — suppress GraphView's own.
+  // Non-station 1-hop neighbors of the selected station — the people, creatures,
+  // locations and factions tied to it (HOME_OF, INHABITS, BASED_AT, …). These
+  // never get a tunnel card; the radar dossier surfaces them instead.
+  const sceneRelated = useMemo<SceneNeighbor[]>(() => {
+    if (!hudSceneActive || !selectedApiNode) return []
+    const out: SceneNeighbor[] = []
+    const seen = new Set<string>([selectedApiNode.ref_id])
+    for (const e of effectiveEdges) {
+      let nb: string | null = null
+      if (e.source === selectedApiNode.ref_id) nb = e.target
+      else if (e.target === selectedApiNode.ref_id) nb = e.source
+      if (!nb || seen.has(nb)) continue
+      seen.add(nb)
+      const node = effectiveNodeByRefId.get(nb)
+      if (!node || node.node_type === "Station") continue
+      const idx = refIdToIndex.get(nb)
+      if (idx === undefined) continue
+      out.push({ node, idx, edgeLabel: e.edge_type })
+    }
+    return out
+  }, [hudSceneActive, selectedApiNode, effectiveEdges, effectiveNodeByRefId, refIdToIndex])
+
+  // The holo cards / radar dossier ARE the labels for these nodes — suppress
+  // GraphView's own so they don't double up.
   const hudSuppressedLabelIds = useMemo<Set<number> | null>(() => {
     if (!hudSceneActive || viewState.mode !== "subgraph") return null
     const set = new Set<number>([viewState.selectedNodeId])
     for (const n of sceneNeighbors) set.add(n.idx)
+    for (const n of sceneRelated) set.add(n.idx)
     return set
-  }, [hudSceneActive, viewState, sceneNeighbors])
+  }, [hudSceneActive, viewState, sceneNeighbors, sceneRelated])
 
   // Opens the in-3D case board (morph + camera tilt + Html cards) on the
   // node the user has been zooming into. apparentRadius is unused now —
@@ -2140,6 +2200,7 @@ export function GraphCanvas({ nodes, edges, schemas, onNodeSelect }: GraphCanvas
               nodes={overlayNodes}
               activeLines={activeLines}
               activeState={hoveredState}
+              images={stationImages}
             />
           </>
         )}
@@ -2160,6 +2221,7 @@ export function GraphCanvas({ nodes, edges, schemas, onNodeSelect }: GraphCanvas
           suppressHover={cameraInteracting}
           mutedNodeIds={mutedNodeIds}
           suppressLabelIds={hudSuppressedLabelIds}
+          imageOverrides={stationAvatarOverrides}
           onGraphClick={() => {
             useGraphStore.getState().setSidebarSelectedNode(null)
             useGraphStore.getState().setHoveredNode(null)
@@ -2171,6 +2233,7 @@ export function GraphCanvas({ nodes, edges, schemas, onNodeSelect }: GraphCanvas
             selectedNodeId={viewState.selectedNodeId}
             focal={selectedApiNode}
             neighbors={sceneNeighbors}
+            related={sceneRelated}
             onFocusNode={handleNodeClick}
           />
         )}

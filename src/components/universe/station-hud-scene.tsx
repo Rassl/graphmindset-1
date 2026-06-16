@@ -134,28 +134,55 @@ function stationState(node: ApiNode) {
   return statusToState(p.station_status ?? p.status, p.faction)
 }
 
-// Rotating sweep wedge — atmospheric "this station is in focus" cue.
-function SweepWedge() {
-  const ref = useRef<THREE.Mesh>(null)
-  useFrame((_, delta) => {
-    if (ref.current) ref.current.rotation.z -= delta * 0.55
-  })
+const TWO_PI = Math.PI * 2
+const RED = "#ff6b6b"
+
+// Node type → dossier accent. Surfaces what kind of contact each marker is at a
+// glance (who lives/operates/lurks at this station).
+const TYPE_COLOR: Record<string, string> = {
+  Person: "#7fd4ff",
+  Creature: "#ff8a5b",
+  Location: "#9b8cff",
+  Organization: GOLD,
+  Item: "#6be3a8",
+  Weapon: RED,
+  Transport: TEAL,
+}
+const typeColor = (t: string) => TYPE_COLOR[t] ?? "#9aa3ab"
+
+// Outermost ring doubles as a reachability gauge: teal arc = share of open
+// tunnels out of this station, red arc = blocked. A glance reads hub vs
+// chokepoint vs dead-end.
+function ReachabilityArc({ ratio }: { ratio: number }) {
+  const open = Math.max(0, Math.min(1, ratio))
+  const start = Math.PI / 2
   return (
-    <mesh ref={ref} position={[0, 0, -0.002]}>
-      <circleGeometry args={[4.7, 48, 0, 0.95]} />
-      <meshBasicMaterial
-        color={TEAL}
-        transparent
-        opacity={0.05}
-        blending={THREE.AdditiveBlending}
-        depthWrite={false}
-        side={THREE.DoubleSide}
-      />
-    </mesh>
+    <>
+      {open > 0.001 && (
+        <mesh position={[0, 0, 0.003]}>
+          <ringGeometry args={[4.78, 5.02, 160, 1, start, TWO_PI * open]} />
+          <meshBasicMaterial
+            color={TEAL}
+            transparent
+            opacity={1}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
+      )}
+      {open < 0.999 && (
+        <mesh position={[0, 0, 0.003]}>
+          <ringGeometry
+            args={[4.78, 5.02, 160, 1, start + TWO_PI * open, TWO_PI * (1 - open)]}
+          />
+          <meshBasicMaterial color={RED} transparent opacity={0.8} depthWrite={false} />
+        </mesh>
+      )}
+    </>
   )
 }
 
-function RadarRings() {
+function RadarRings({ passableRatio }: { passableRatio: number }) {
   // Tick marks — 72 short radial dashes between the inner and mid rings.
   const ticks = useMemo(() => {
     const pts: number[] = []
@@ -168,6 +195,14 @@ function RadarRings() {
     }
     return new Float32Array(pts)
   }, [])
+
+  // Shared sweep angle so the blips can ping in lockstep with the visible wedge.
+  const sweepRef = useRef<THREE.Mesh>(null)
+  const sweepAngle = useRef(0)
+  useFrame((_, delta) => {
+    sweepAngle.current -= delta * 0.55
+    if (sweepRef.current) sweepRef.current.rotation.z = sweepAngle.current
+  })
 
   return (
     <>
@@ -187,6 +222,9 @@ function RadarRings() {
         </bufferGeometry>
         <lineBasicMaterial color={TEAL} transparent opacity={0.4} depthWrite={false} />
       </lineSegments>
+
+      <ReachabilityArc ratio={passableRatio} />
+
       {/* Soft inner glow + gold core ring under the station glyph */}
       <mesh position={[0, 0, -0.004]}>
         <circleGeometry args={[2.0, 48]} />
@@ -202,7 +240,160 @@ function RadarRings() {
         <ringGeometry args={[0.55, 0.62, 48]} />
         <meshBasicMaterial color={GOLD} transparent opacity={0.9} depthWrite={false} />
       </mesh>
-      <SweepWedge />
+
+      {/* Rotating sweep wedge — now drives the blip pings above. */}
+      <mesh ref={sweepRef} position={[0, 0, -0.002]}>
+        <circleGeometry args={[4.7, 48, 0, 0.95]} />
+        <meshBasicMaterial
+          color={TEAL}
+          transparent
+          opacity={0.05}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+    </>
+  )
+}
+
+// Radius (map units) at which dossier chips ring the focal photo — between the
+// mid and outer rings so they sit in open scope space.
+const DOSSIER_R = 3.95
+const DOSSIER_MAX = 10
+
+// A single related entity as a compact, clickable chip: face/initials, name,
+// and how it's tied to the station (HOME OF, INHABITS, BASED AT, …).
+function DossierChip({
+  neighbor,
+  onClick,
+}: {
+  neighbor: SceneNeighbor
+  onClick: () => void
+}) {
+  const node = neighbor.node
+  const color = typeColor(node.node_type)
+  const name = nodeName(node)
+  const img = nodeImage(node)
+  const rel = (neighbor.edgeLabel || "LINKED").replace(/_/g, " ").toUpperCase()
+  return (
+    <div
+      data-hud-card={node.ref_id}
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick()
+      }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 7,
+        padding: "4px 10px 4px 4px",
+        fontFamily: "var(--font-heading), sans-serif",
+        color: INK,
+        cursor: "pointer",
+        clipPath: NOTCH(7),
+        border: `1px solid ${color}`,
+        background: "rgba(5, 14, 16, 0.92)",
+        boxShadow: `0 0 12px ${color}33`,
+        whiteSpace: "nowrap",
+        transition: "transform 140ms ease, box-shadow 140ms ease",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-2px)"
+        e.currentTarget.style.boxShadow = `0 0 22px ${color}66`
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = ""
+        e.currentTarget.style.boxShadow = `0 0 12px ${color}33`
+      }}
+    >
+      <div
+        style={{
+          width: 26,
+          height: 26,
+          flexShrink: 0,
+          borderRadius: "50%",
+          overflow: "hidden",
+          border: `1px solid ${color}`,
+          background: `${color}22`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 10.5,
+          fontWeight: 700,
+          color,
+        }}
+      >
+        {img ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={img}
+            alt={name}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          ghostInitials(name)
+        )}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: 0.4,
+            maxWidth: 124,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {name}
+        </span>
+        <span style={{ fontSize: 7.5, letterSpacing: 1, color }}>
+          {node.node_type.toUpperCase()} · {rel}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// Rings the station's related people/creatures/locations around the scope as
+// clickable chips — the "who/what is here" the tunnel cards never show.
+function RadarDossier({
+  related,
+  cx,
+  cz,
+  ringY,
+  onFocusNode,
+}: {
+  related: SceneNeighbor[]
+  cx: number
+  cz: number
+  ringY: number
+  onFocusNode: (nodeId: number) => void
+}) {
+  const items = related.slice(0, DOSSIER_MAX)
+  if (items.length === 0) return null
+  return (
+    <>
+      {items.map((nb, i) => {
+        // Even spread around the scope, starting at top, going clockwise. Map
+        // radar-local (x, y) → world (cx + x, ringY, cz - y).
+        const a = Math.PI / 2 - (i / items.length) * TWO_PI
+        const x = cx + Math.cos(a) * DOSSIER_R
+        const z = cz - Math.sin(a) * DOSSIER_R
+        return (
+          <Html
+            key={nb.node.ref_id}
+            position={[x, ringY + 0.05, z]}
+            zIndexRange={[70, 0]}
+            style={{ pointerEvents: "none" }}
+          >
+            <div style={{ transform: "translate(-50%, -50%)", pointerEvents: "auto" }}>
+              <DossierChip neighbor={nb} onClick={() => onFocusNode(nb.idx)} />
+            </div>
+          </Html>
+        )
+      })}
     </>
   )
 }
@@ -506,6 +697,9 @@ export interface StationHudSceneProps {
   selectedNodeId: number
   focal: ApiNode
   neighbors: SceneNeighbor[]
+  /** Non-station entities tied to the station (people, creatures, locations, …)
+   *  — surfaced as the radar dossier rather than tunnel cards. */
+  related: SceneNeighbor[]
   onFocusNode: (nodeId: number) => void
 }
 
@@ -514,18 +708,37 @@ export function StationHudScene({
   selectedNodeId,
   focal,
   neighbors,
+  related,
   onFocusNode,
 }: StationHudSceneProps) {
   const p = graph.nodes[selectedNodeId]?.position
   if (!p) return null
   const ringY = p.y + RING_LIFT
 
+  // Share of open vs blocked tunnels for the reachability gauge. Cheap, so it
+  // runs inline rather than as a hook below the early return above.
+  let passable = 0
+  for (const nb of neighbors) {
+    if (!BLOCKING_STATES.has(stationState(nb.node))) passable++
+  }
+  const passableRatio = neighbors.length ? passable / neighbors.length : 1
+
   return (
     <group>
       {/* Radar rings on the map plane around the station */}
       <group position={[p.x, ringY, p.z]} rotation={[-Math.PI / 2, 0, 0]}>
-        <RadarRings />
+        <RadarRings passableRatio={passableRatio} />
       </group>
+
+      {/* Dossier: people / creatures / locations tied to this station, arranged
+          around the scope as clickable type-coded markers. */}
+      <RadarDossier
+        related={related}
+        cx={p.x}
+        cz={p.z}
+        ringY={ringY}
+        onFocusNode={onFocusNode}
+      />
 
       {/* Gold beam + central holo card */}
       <group position={[p.x, p.y, p.z]}>

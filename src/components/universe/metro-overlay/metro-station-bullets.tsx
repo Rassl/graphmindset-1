@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import * as THREE from "three"
 import type { GraphNode as ApiNode } from "@/lib/graph-api"
 import {
@@ -11,9 +11,97 @@ import {
   type StationState,
 } from "./constants"
 
+interface Bullet {
+  id: string
+  x: number
+  y: number
+  z: number
+  color: [number, number, number]
+  lines: string[]
+  fill: string
+  state: StationState
+}
+
+// Imperative texture load — deliberately not drei's useTexture, so a slow or
+// broken image URL never suspends or throws inside the 3D scene. While loading
+// (or on error) the bullet stays its plain schematic disc; the photo swaps in
+// once decoded, and is disposed when the url changes or the bullet unmounts.
+function useImageTexture(url: string | undefined): THREE.Texture | null {
+  const [texture, setTexture] = useState<THREE.Texture | null>(null)
+  useEffect(() => {
+    // No url → nothing to load. Any previously-set texture was already cleared
+    // by this effect's prior cleanup, so the disc is back to its flat fill.
+    if (!url) return
+    let active = true
+    let loaded: THREE.Texture | null = null
+    const loader = new THREE.TextureLoader()
+    loader.setCrossOrigin("anonymous")
+    loader.load(
+      url,
+      (tex) => {
+        if (!active) {
+          tex.dispose()
+          return
+        }
+        tex.colorSpace = THREE.SRGBColorSpace
+        loaded = tex
+        setTexture(tex)
+      },
+      undefined,
+      () => {
+        /* ignore load errors — keep the schematic disc */
+      },
+    )
+    return () => {
+      active = false
+      loaded?.dispose()
+      setTexture(null)
+    }
+  }, [url])
+  return texture
+}
+
+function StationBullet({
+  bullet,
+  opacity,
+  imageUrl,
+}: {
+  bullet: Bullet
+  opacity: number
+  imageUrl?: string
+}) {
+  const texture = useImageTexture(imageUrl)
+  return (
+    <group position={[bullet.x, bullet.y, bullet.z]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh>
+        <ringGeometry args={[0.22, 0.27, 48]} />
+        <meshBasicMaterial
+          color={new THREE.Color(bullet.color[0], bullet.color[1], bullet.color[2])}
+          transparent
+          opacity={opacity}
+        />
+      </mesh>
+      <mesh position={[0, 0, 0.001]}>
+        <circleGeometry args={[0.22, 48]} />
+        {texture ? (
+          // White base so the photo shows true colors; circleGeometry UVs crop
+          // the (square) image to the disc — a circular avatar.
+          <meshBasicMaterial map={texture} transparent opacity={opacity} />
+        ) : (
+          <meshBasicMaterial color={bullet.fill} transparent opacity={opacity} />
+        )}
+      </mesh>
+    </group>
+  )
+}
+
 // Schematic-style station bullets — a flat white-cream disc ringed in the
 // station's primary line color, lying on the y=0 plane. This is what makes
 // a metro map *look* like one; lines without bullets read as plain edges.
+//
+// A station that has been enriched with an image (image_url from its backend
+// detail fetch, surfaced here via the `images` map) renders that photo inside
+// the disc instead of the flat fill.
 //
 // Renders nothing when no Station nodes carry mapX/mapZ, so safe to mount
 // in non-metro themes.
@@ -21,22 +109,15 @@ export function MetroStationBullets({
   nodes,
   activeLines,
   activeState,
+  images,
 }: {
   nodes: ApiNode[]
   activeLines: Set<string> | null
   activeState: StationState | null
+  images?: Map<string, string> | null
 }) {
   const bullets = useMemo(() => {
-    const result: Array<{
-      id: string
-      x: number
-      y: number
-      z: number
-      color: [number, number, number]
-      lines: string[]
-      fill: string
-      state: StationState
-    }> = []
+    const result: Bullet[] = []
     for (const n of nodes) {
       if (n.node_type !== "Station") continue
       const p = n.properties as Record<string, unknown> | undefined
@@ -82,24 +163,12 @@ export function MetroStationBullets({
         const stateFocus = activeState !== null && b.state === activeState
         const opacity = lineFocus || stateFocus ? 1 : 0.12
         return (
-          <group
+          <StationBullet
             key={b.id}
-            position={[b.x, b.y, b.z]}
-            rotation={[-Math.PI / 2, 0, 0]}
-          >
-            <mesh>
-              <ringGeometry args={[0.22, 0.27, 48]} />
-              <meshBasicMaterial
-                color={new THREE.Color(b.color[0], b.color[1], b.color[2])}
-                transparent
-                opacity={opacity}
-              />
-            </mesh>
-            <mesh position={[0, 0, 0.001]}>
-              <circleGeometry args={[0.22, 48]} />
-              <meshBasicMaterial color={b.fill} transparent opacity={opacity} />
-            </mesh>
-          </group>
+            bullet={b}
+            opacity={opacity}
+            imageUrl={images?.get(b.id)}
+          />
         )
       })}
     </group>
