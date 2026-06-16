@@ -45,8 +45,10 @@ import {
   MetroLegend,
   statusToState,
   readStationLines,
+  MAP_Y_OFFSET,
   type StationState,
 } from "./metro-overlay"
+import { METRO_LINES } from "@/data/metro"
 import {
   StationHudScene,
   StationZonePlate,
@@ -1700,6 +1702,63 @@ export function GraphCanvas({ nodes, edges, schemas, onNodeSelect }: GraphCanvas
     })
   }, [])
 
+  // Fly the camera to frame a whole metro line — or the entire network when
+  // `color` is null. Stations sit on a fixed plane at
+  // [mapX, mapY + MAP_Y_OFFSET, mapZ]; we frame the line's footprint with an
+  // angled tactical pose (so it doesn't read as a flat top-down) and reuse the
+  // user's current orbit azimuth so the move feels continuous, not a snap.
+  const flyToLine = useCallback(
+    (color: string | null) => {
+      let minX = Infinity,
+        maxX = -Infinity,
+        minZ = Infinity,
+        maxZ = -Infinity
+      let sumX = 0,
+        sumY = 0,
+        sumZ = 0,
+        count = 0
+      for (const n of nodes) {
+        if (n.node_type !== "Station") continue
+        const p = n.properties as Record<string, unknown> | undefined
+        if (!p || typeof p.mapX !== "number" || typeof p.mapZ !== "number") continue
+        if (color !== null && !readStationLines(p).includes(color)) continue
+        const x = p.mapX as number
+        const y = (typeof p.mapY === "number" ? (p.mapY as number) : 0) + MAP_Y_OFFSET
+        const z = p.mapZ as number
+        minX = Math.min(minX, x)
+        maxX = Math.max(maxX, x)
+        minZ = Math.min(minZ, z)
+        maxZ = Math.max(maxZ, z)
+        sumX += x
+        sumY += y
+        sumZ += z
+        count++
+      }
+      if (count === 0) return
+      const cx = sumX / count
+      const cy = sumY / count
+      const cz = sumZ / count
+      // Half-extent the camera must fit; floor keeps single-/short-line framing
+      // from diving in too close.
+      const radius = Math.max(maxX - cx, cx - minX, maxZ - cz, cz - minZ, 4)
+      const fovRad = (50 / 2) * (Math.PI / 180)
+      const elev = (48 * Math.PI) / 180
+      const dist = Math.max(12, (radius * 1.3) / Math.tan(fovRad))
+      const horiz = dist * Math.cos(elev)
+      const vert = dist * Math.sin(elev)
+      const az = cameraRef.current?.azimuthAngle ?? 0
+      flyCamTo({
+        posX: cx + Math.sin(az) * horiz,
+        posY: cy + vert,
+        posZ: cz + Math.cos(az) * horiz,
+        lookX: cx,
+        lookY: cy,
+        lookZ: cz,
+      })
+    },
+    [nodes, flyCamTo],
+  )
+
   // Reset view only on full data replacement (new search), not on appends
   // from sidebar-driven neighbor fetches — otherwise focusing the camera on
   // a clicked node would be undone every time a neighborhood arrives.
@@ -2446,7 +2505,14 @@ export function GraphCanvas({ nodes, edges, schemas, onNodeSelect }: GraphCanvas
       <HoverPreviewCard node={hoveredCardNode} schemas={schemas} x={cursor.x} y={cursor.y} />
 
       {metroEnabled && (
-        <MetroLegend hoveredState={hoveredState} onHoverState={setHoveredState} />
+        <MetroLegend
+          hoveredState={hoveredState}
+          onHoverState={setHoveredState}
+          lines={METRO_LINES}
+          hoveredLine={hoveredLine}
+          onHoverLine={setHoveredLine}
+          onSelectLine={flyToLine}
+        />
       )}
 
     </div>

@@ -16,6 +16,21 @@ const LINE_COLOR_BY_ID: Record<string, string> = {
   lyub: "lightgreen",
 }
 
+// Public descriptor for each metro line, keyed by the render color name
+// (the same key MetroLinesLayer groups segments under). Powers the legend's
+// line picker and the camera fly-to. Preserves the 2087 line order.
+export interface MetroLineInfo {
+  color: string
+  name: string
+  en: string
+}
+export const METRO_LINES: MetroLineInfo[] = lines2087
+  .map((L) => {
+    const color = LINE_COLOR_BY_ID[L.id]
+    return color ? { color, name: L.name, en: L.en } : null
+  })
+  .filter((x): x is MetroLineInfo => x !== null)
+
 // Compute the comma-joined `line` property for each station — used by
 // MetroCanvas to color the brown ring smoothing and as ambient metadata.
 const LINES_BY_STATION = (() => {
