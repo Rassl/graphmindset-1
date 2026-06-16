@@ -121,13 +121,22 @@ export function FeedView() {
     return [...counts.entries()].sort((a, b) => b[1] - a[1])
   }, [nodes])
 
-  const filtered = useMemo(
-    () =>
+  const filtered = useMemo(() => {
+    const base =
       activeTypes.size === 0
         ? nodes
-        : nodes.filter((n) => activeTypes.has(n.node_type ?? "Unknown")),
-    [nodes, activeTypes]
-  )
+        : nodes.filter((n) => activeTypes.has(n.node_type ?? "Unknown"))
+    // Stations are seeded from the local metro fixture before the
+    // /v2/nodes/latest results are spliced in, so they'd otherwise sort to the
+    // top of the list. Keep relative order within each group, but push Stations
+    // below the latest-endpoint nodes.
+    const stations: GraphNode[] = []
+    const rest: GraphNode[] = []
+    for (const n of base) {
+      ;(n.node_type === "Station" ? stations : rest).push(n)
+    }
+    return [...rest, ...stations]
+  }, [nodes, activeTypes])
 
   const hasResults = nodes.length > 0
 

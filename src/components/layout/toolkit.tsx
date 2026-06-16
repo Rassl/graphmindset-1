@@ -201,18 +201,22 @@ export function Toolkit({
         onClick={onToggleFollowing}
         active={followingOpen}
       />
-      <ToolkitButton
-        icon={Layers}
-        ariaLabel="Sources"
-        onClick={onToggleSources}
-        active={sourcesOpen}
-      />
-      <ToolkitButton
-        icon={Cpu}
-        ariaLabel="Workflows"
-        onClick={onToggleWorkflows}
-        active={workflowsOpen}
-      />
+      {isAdmin && (
+        <>
+          <ToolkitButton
+            icon={Layers}
+            ariaLabel="Sources"
+            onClick={onToggleSources}
+            active={sourcesOpen}
+          />
+          <ToolkitButton
+            icon={Cpu}
+            ariaLabel="Workflows"
+            onClick={onToggleWorkflows}
+            active={workflowsOpen}
+          />
+        </>
+      )}
 
       {isAdmin && (
         <>
@@ -321,8 +325,13 @@ export function ToolkitFAB({
               { icon: MessageSquare, label: "Graph Agent", action: onToggleAgent ?? (() => {}), active: agentOpen ?? false },
               { icon: BookMarked, label: "My Content", action: onToggleMyContent, active: myContentOpen },
               { icon: Heart, label: "Following", action: onToggleFollowing, active: followingOpen },
-              { icon: Layers, label: "Sources", action: onToggleSources, active: sourcesOpen },
-              { icon: Cpu, label: "Workflows", action: onToggleWorkflows ?? (() => {}), active: workflowsOpen ?? false },
+              // Sources & Workflows are admin-only for now.
+              ...(isAdmin
+                ? [
+                    { icon: Layers, label: "Sources", action: onToggleSources, active: sourcesOpen },
+                    { icon: Cpu, label: "Workflows", action: onToggleWorkflows ?? (() => {}), active: workflowsOpen ?? false },
+                  ]
+                : []),
             ].map(({ icon: Icon, label, action, active }) => (
               <button
                 key={label}
