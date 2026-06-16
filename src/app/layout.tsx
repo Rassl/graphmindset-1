@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next"
 import { Rajdhani, Plus_Jakarta_Sans, Fira_Code } from "next/font/google"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 
 const rajdhani = Rajdhani({
@@ -77,6 +78,7 @@ export default function RootLayout({
           </ul>
         </div>
         <TooltipProvider>{children}</TooltipProvider>
+        <Analytics />
       </body>
     </html>
   )
