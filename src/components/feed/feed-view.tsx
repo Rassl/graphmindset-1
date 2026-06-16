@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Search as SearchIcon, Clock } from "lucide-react"
 import { MultiSelectCustom, type MultiSelectOption } from "@/components/ui/multi-select-custom"
 import { useGraphStore } from "@/stores/graph-store"
@@ -27,6 +27,13 @@ export function FeedView() {
   const schemas = useSchemaStore((s) => s.schemas)
 
   const [activeTypes, setActiveTypes] = useState<Set<string>>(new Set())
+  // Guards the initial load against React StrictMode's double-invoke. We seed
+  // the fixture stations synchronously, which makes the store non-empty — so
+  // the `nodes.length > 0` check alone would let the second pass bail while the
+  // first pass's in-flight latest fetch is the one carrying real content. The
+  // ref persists across both passes on the same instance, so the load runs once
+  // and its result is always applied.
+  const didLoadRef = useRef(false)
 
   useEffect(() => {
     clearSelection()
@@ -40,28 +47,38 @@ export function FeedView() {
   // Station rows are dropped — they'd float without positions, and the
   // fixture is the source of truth for the schematic.
   //
+  // The fixture only owns the schematic skeleton: Station nodes (which carry
+  // the mapX/mapZ positions) and the TUNNEL_TO "line" edges between them.
+  // Everything else — Person, Organization, Item, Creature, … and their
+  // relationships — comes from the backend, which was itself seeded from this
+  // fixture, so ref_ids line up and the splice dedupes cleanly.
+  //
   // Metro fixture seeding is opt-in via NEXT_PUBLIC_METRO_OVERLAY=1. When
   // off, we only load whatever NEXT_PUBLIC_API_URL returns.
   useEffect(() => {
+    if (didLoadRef.current) return
     if (useGraphStore.getState().nodes.length > 0) return
     if (isMocksEnabled()) {
       setGraphData(MOCK_NODES, MOCK_EDGES)
       return
     }
+    didLoadRef.current = true
 
     const metroEnabled = process.env.NEXT_PUBLIC_METRO_OVERLAY === "1"
-    const fixtureNodes = metroEnabled ? (metroSeries.nodes as GraphNode[]) : []
-    const fixtureEdges = metroEnabled ? (metroSeries.edges as GraphEdge[]) : []
+    const fixtureNodes = metroEnabled
+      ? (metroSeries.nodes as GraphNode[]).filter((n) => n.node_type === "Station")
+      : []
+    const fixtureEdges = metroEnabled
+      ? (metroSeries.edges as GraphEdge[]).filter((e) => e.edge_type === "TUNNEL_TO")
+      : []
     if (metroEnabled) {
       setGraphData(fixtureNodes, fixtureEdges)
     }
 
-    let cancelled = false
     setLoading(true)
     ;(async () => {
       try {
         const result = await getLatestNodes()
-        if (cancelled) return
         const seenNodeIds = new Set(fixtureNodes.map((n) => n.ref_id))
         const seenEdgeKeys = new Set(
           fixtureEdges.map((e) => `${e.source}|${e.target}|${e.edge_type}`),
@@ -89,12 +106,9 @@ export function FeedView() {
       } catch (err) {
         console.error("[feed-view] getLatestNodes failed:", err)
       } finally {
-        if (!cancelled) setLoading(false)
+        setLoading(false)
       }
     })()
-    return () => {
-      cancelled = true
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
