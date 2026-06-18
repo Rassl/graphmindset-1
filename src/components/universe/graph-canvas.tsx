@@ -2309,6 +2309,7 @@ export function GraphCanvas({ nodes, edges, schemas, onNodeSelect }: GraphCanvas
           graph={graph}
           viewState={viewState}
           onNodeClick={handleNodeClick}
+          hidden={morphOpen}
         />
         <PrevNodeIndicator
           graph={graph}
