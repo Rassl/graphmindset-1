@@ -83,6 +83,23 @@ export function AttachableEmbeds({ nodeRefId, schemas, onNavigate }: AttachableE
 
   const peers = result && result.refId === nodeRefId ? result.peers : null
 
+  // A boost from any view (grid tile or lightbox) bumps the peer's boost in our
+  // single source of truth, so every other view of the same node reflects the
+  // new total without a refetch. `boost` is canonical (mirrors nodeBoost()).
+  const handleBoosted = useCallback((refId: string, delta: number) => {
+    setResult((r) => {
+      if (!r) return r
+      let changed = false
+      const peers = r.peers.map((p) => {
+        if (p.ref_id !== refId) return p
+        changed = true
+        const cur = nodeBoost(p)
+        return { ...p, properties: { ...p.properties, boost: cur + delta } }
+      })
+      return changed ? { ...r, peers } : r
+    })
+  }, [])
+
   const { images, episodes, rest } = useMemo(() => {
     const list = peers ?? []
     return {
@@ -103,7 +120,7 @@ export function AttachableEmbeds({ nodeRefId, schemas, onNavigate }: AttachableE
       ))}
 
       {images.length > 0 && (
-        <MediaGrid images={images} onOpen={(i) => setLightbox({ images, index: i })} />
+        <MediaGrid images={images} onOpen={(i) => setLightbox({ images, index: i })} onBoosted={handleBoosted} />
       )}
 
       {rest.map((n) => (
@@ -124,6 +141,7 @@ export function AttachableEmbeds({ nodeRefId, schemas, onNavigate }: AttachableE
           schemas={schemas}
           onClose={() => setLightbox(null)}
           onIndex={(i) => setLightbox((lb) => (lb ? { ...lb, index: i } : lb))}
+          onBoosted={handleBoosted}
         />
       )}
     </div>
@@ -189,7 +207,7 @@ function EpisodeEmbed({
 }
 
 /* ── Image mosaic — 1 = wide, 2-4 = grid, 5+ = +N ───────────────────────── */
-function MediaGrid({ images, onOpen }: { images: GraphNode[]; onOpen: (index: number) => void }) {
+function MediaGrid({ images, onOpen, onBoosted }: { images: GraphNode[]; onOpen: (index: number) => void; onBoosted?: (refId: string, delta: number) => void }) {
   const n = images.length
   const cols = n === 1 ? 1 : n === 3 ? 3 : 2
   const cap = n > 4 ? 4 : n
@@ -236,7 +254,7 @@ function MediaGrid({ images, onOpen }: { images: GraphNode[]; onOpen: (index: nu
           )}
           {/* Current boost amount + trigger — always visible, FB/X-style. */}
           <div className="absolute bottom-2 left-2 z-10">
-            <ImageBoost node={im} variant="compact" />
+            <ImageBoost node={im} variant="compact" onBoosted={onBoosted} />
           </div>
         </div>
       ))}
@@ -285,12 +303,14 @@ function Lightbox({
   schemas,
   onClose,
   onIndex,
+  onBoosted,
 }: {
   images: GraphNode[]
   index: number
   schemas: SchemaNode[]
   onClose: () => void
   onIndex: (i: number) => void
+  onBoosted?: (refId: string, delta: number) => void
 }) {
   const go = useCallback(
     (dir: number) => onIndex((index + dir + images.length) % images.length),
@@ -361,7 +381,7 @@ function Lightbox({
         )}
         <figcaption className="flex flex-col items-center gap-2.5 text-center">
           <span className="text-sm font-medium text-foreground">{resolveNodeTitle(im, schemas)}</span>
-          <ImageBoost node={im} variant="compact" className="px-3 py-1 text-sm" />
+          <ImageBoost node={im} variant="compact" className="px-3 py-1 text-sm" onBoosted={onBoosted} />
         </figcaption>
       </figure>
 
@@ -440,10 +460,12 @@ function ImageBoost({
   node,
   variant = "default",
   className,
+  onBoosted,
 }: {
   node: GraphNode
   variant?: "default" | "compact"
   className?: string
+  onBoosted?: (refId: string, delta: number) => void
 }) {
   const p = node.properties ?? {}
   const ownerReference = typeof p.owner_reference_id === "string" ? p.owner_reference_id : undefined
@@ -463,6 +485,7 @@ function ImageBoost({
         boostCount={boost}
         variant={variant}
         className={className}
+        onBoosted={(delta) => onBoosted?.(node.ref_id, delta)}
       />
     )
   }

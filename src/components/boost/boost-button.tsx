@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { BulletIcon } from "@/components/ui/bullet-icon"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
@@ -24,6 +24,10 @@ interface BoostButtonProps {
   /** "default" = labelled button; "compact" = single glassy pill that always
    *  shows the current total and doubles as the trigger (for image overlays). */
   variant?: "default" | "compact"
+  /** Called after a boost succeeds, with the amount just added. Lets the parent
+   *  propagate the new total to a shared source of truth so other views of the
+   *  same node (e.g. the sibling image tile and the lightbox) stay in sync. */
+  onBoosted?: (delta: number) => void
 }
 
 export function BoostButton({
@@ -34,8 +38,23 @@ export function BoostButton({
   boostCount = 0,
   className,
   variant = "default",
+  onBoosted,
 }: BoostButtonProps) {
   const [count, setCount] = useState(boostCount)
+
+  // Reset to the node's own total when the button is reused for a different
+  // node (lists re-key by ref_id, but be defensive against in-place swaps).
+  useEffect(() => {
+    setCount(boostCount)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refId])
+
+  // When the parent raises boostCount (e.g. this node was boosted from another
+  // view and the shared total bumped), follow it up. Never follow it *down* so
+  // a lagging refetch can't wipe out an optimistic local boost.
+  useEffect(() => {
+    setCount((c) => (boostCount > c ? boostCount : c))
+  }, [boostCount])
   const [boosting, setBoosting] = useState(false)
   const [flash, setFlash] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -89,6 +108,7 @@ export function BoostButton({
       setCount((c) => c + DEFAULT_BOOST_AMOUNT)
       setFlash(true)
       setTimeout(() => setFlash(false), 600)
+      onBoosted?.(DEFAULT_BOOST_AMOUNT)
       refreshBalance()
     } catch (err) {
       console.error("Boost failed:", err)
@@ -96,7 +116,7 @@ export function BoostButton({
     } finally {
       setBoosting(false)
     }
-  }, [refId, ownerReference, pubkey, routeHint, boosting, isAdmin, setBudget, refreshBalance, openModal])
+  }, [refId, ownerReference, pubkey, routeHint, boosting, isAdmin, setBudget, refreshBalance, openModal, onBoosted])
 
   if (variant === "compact") {
     // Single pill: always shows the current total and is itself the trigger.
