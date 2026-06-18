@@ -95,6 +95,10 @@ interface Props {
   viewState: ViewState;
   onNodeClick: (id: number) => void;
   hovered?: number | null;
+  /** When true (e.g. while the 2D case view is opening/open via long-hold),
+   *  all decks are hidden and any expanded deck is collapsed — the indicators
+   *  would otherwise float on top of the case board. */
+  hidden?: boolean;
 }
 
 interface Member {
@@ -181,7 +185,7 @@ function geom(
   return { transform, zIndex: Math.round(z), opacity: op };
 }
 
-export function OffscreenIndicators({ graph, viewState, onNodeClick, hovered = null }: Props) {
+export function OffscreenIndicators({ graph, viewState, onNodeClick, hovered = null, hidden = false }: Props) {
   const decksRef = useRef<Record<EdgeSide, DeckDom> | null>(null);
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const expandedRef = useRef<EdgeSide | null>(null);
@@ -614,7 +618,7 @@ export function OffscreenIndicators({ graph, viewState, onNodeClick, hovered = n
     sizeRef.current.w = w;
     sizeRef.current.h = h;
 
-    if (viewState.mode !== "subgraph") {
+    if (viewState.mode !== "subgraph" || hidden) {
       if (expandedRef.current !== null) expandedRef.current = null;
       for (const edge of EDGE_SIDES) {
         decks[edge].members = [];

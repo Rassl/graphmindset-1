@@ -31,6 +31,11 @@ vi.mock("@/stores/graph-store", () => ({
     sel ? sel(graphState) : graphState,
 }))
 
+const push = vi.fn()
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+}))
+
 describe("UniverseHeader", () => {
   beforeEach(() => {
     vi.clearAllMocks()
