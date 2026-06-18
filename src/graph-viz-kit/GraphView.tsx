@@ -302,6 +302,9 @@ const NODE_TYPE_COLORS: Record<string, RGB> = {
   document: { r: 0.55, g: 0.71, b: 0.85 },
   tweet: { r: 0.36, g: 0.84, b: 1.0 },
   video: { r: 0.86, g: 0.40, b: 0.40 },
+  art: { r: 0.96, g: 0.41, b: 0.83 },
+  achievement: { r: 0.73, g: 0.62, b: 0.22 },
+  meme: { r: 0.13, g: 0.70, b: 0.54 },
 };
 function colorForNodeType(t?: string): RGB {
   if (!t) return NODE_DEFAULT_COLOR;
