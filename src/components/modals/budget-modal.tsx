@@ -95,7 +95,7 @@ function WithdrawStep({
 }
 
 export function BudgetModal() {
-  const { activeModal, close } = useModalStore()
+  const { budgetOpen, closeBudget } = useModalStore()
   const { budget, setBudget } = useUserStore()
   const refreshBalance = useUserStore((s) => s.refreshBalance)
   const [loading, setLoading] = useState(false)
@@ -175,8 +175,8 @@ export function BudgetModal() {
   }, [])
 
   useEffect(() => {
-    if (activeModal !== "budget") resetState()
-  }, [activeModal, resetState])
+    if (!budgetOpen) resetState()
+  }, [budgetOpen, resetState])
 
   useEffect(() => {
     return () => {
@@ -188,7 +188,7 @@ export function BudgetModal() {
   // resuming it or generating a new one — instead of silently auto-resuming.
   const resumeAttemptedRef = useRef(false)
   useEffect(() => {
-    if (activeModal !== "budget") {
+    if (!budgetOpen) {
       resumeAttemptedRef.current = false
       return
     }
@@ -211,7 +211,7 @@ export function BudgetModal() {
     setPendingChallenge(pending)
     setFirstPurchaseAmount(pending.amount)
     setStep("first-purchase")
-  }, [activeModal])
+  }, [budgetOpen])
 
   // Resume polling for the stored pending invoice. Does a single quick status
   // check first — if the invoice was already paid while the user was away,
@@ -554,7 +554,7 @@ export function BudgetModal() {
   const successDelta = amount ?? (reachedViaFirstPurchase ? firstPurchaseAmount : null)
 
   return (
-    <Dialog open={activeModal === "budget"} onOpenChange={() => close()}>
+    <Dialog open={budgetOpen} onOpenChange={() => closeBudget()}>
       <DialogContent className="border-border/50 bg-card noise-bg sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="font-heading text-lg tracking-wide flex items-center gap-2">
@@ -1141,7 +1141,7 @@ export function BudgetModal() {
               {reachedViaFirstPurchase && !isWithdrawSuccess && (
                 <div className="flex flex-col gap-2 rounded-md border border-border/50 bg-muted/30 p-3">
                   <p className="text-xs text-foreground/80">
-                    This token is the key to your balance. Store it somewhere safe — you'll need it to restore access if you clear your cookies or switch devices.
+                    This token is the key to your balance. Store it somewhere safe — you&apos;ll need it to restore access if you clear your cookies or switch devices.
                   </p>
                   <Button
                     variant="outline"
