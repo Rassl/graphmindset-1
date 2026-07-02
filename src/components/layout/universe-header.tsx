@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation"
 import { Gift } from "lucide-react"
 import { useAppStore } from "@/stores/app-store"
 import { useGraphStore } from "@/stores/graph-store"
+import { MobileViewToggle } from "./mobile-view-toggle"
 
 export function UniverseHeader() {
   const router = useRouter()
@@ -47,6 +48,7 @@ export function UniverseHeader() {
         {title}
       </h2>
 
+<<<<<<< Updated upstream
       {/* Claim-bullets CTA — pinned right, opens the "How it works" page */}
       <button
         type="button"
@@ -63,6 +65,10 @@ export function UniverseHeader() {
           <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-400" />
         </span>
       </button>
+=======
+      {/* Mobile-only List / Graph switch. */}
+      <MobileViewToggle className="ml-auto self-center" />
+>>>>>>> Stashed changes
     </header>
   )
 }

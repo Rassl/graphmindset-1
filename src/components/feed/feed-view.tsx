@@ -11,7 +11,9 @@ import { getLatestNodes } from "@/lib/graph-api"
 import { metroSeries } from "@/data/metro"
 import type { GraphNode, GraphEdge } from "@/lib/graph-api"
 import { FeedCard } from "./feed-card"
+import { NodeRadialCard } from "@/components/universe/node-radial-card"
 import { HotTakes } from "./hot-takes"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 
 export function FeedView() {
@@ -25,6 +27,7 @@ export function FeedView() {
   const setLoading = useGraphStore((s) => s.setLoading)
   const searchTerm = useAppStore((s) => s.searchTerm)
   const schemas = useSchemaStore((s) => s.schemas)
+  const isMobile = useIsMobile()
 
   const [activeTypes, setActiveTypes] = useState<Set<string>>(new Set())
   // Guards the initial load against React StrictMode's double-invoke. We seed
@@ -190,18 +193,30 @@ export function FeedView() {
           </div>
         )}
 
-        {filtered.map((node) => (
-          <FeedCard
-            key={node.ref_id}
-            node={node}
-            schemas={schemas}
-            onSelect={() => {
-              setSelectedNode(node)
-              setSidebarSelectedNode(node)
-            }}
-            onHover={(h) => setHoveredNode(h ? node : null)}
-          />
-        ))}
+        {filtered.map((node) =>
+          isMobile ? (
+            <NodeRadialCard
+              key={node.ref_id}
+              node={node}
+              schemas={schemas}
+              onOpen={(picked) => {
+                setSelectedNode(picked)
+                setSidebarSelectedNode(picked)
+              }}
+            />
+          ) : (
+            <FeedCard
+              key={node.ref_id}
+              node={node}
+              schemas={schemas}
+              onSelect={() => {
+                setSelectedNode(node)
+                setSidebarSelectedNode(node)
+              }}
+              onHover={(h) => setHoveredNode(h ? node : null)}
+            />
+          ),
+        )}
 
         {hasResults && (
           <div className="text-center py-8 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60">

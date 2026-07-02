@@ -11,6 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { NodePreviewPanel } from "./node-preview-panel"
 import { NodeRow } from "./node-row"
+import { NodeRadialCard } from "@/components/universe/node-radial-card"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { api } from "@/lib/api"
 import { deleteNode } from "@/lib/graph-api"
 import { isMocksEnabled, MOCK_CONTENT, MOCK_PURCHASED_NODES, MOCK_CREATOR_INSIGHTS } from "@/lib/mock-data"
@@ -55,6 +57,7 @@ interface ContentResponse {
 
 export function MyContentPanel({ onClose }: { onClose: () => void }) {
   const { pubKey, isAdmin } = useUserStore()
+  const isMobile = useIsMobile()
   const myContentRefreshKey = useAppStore((s) => s.myContentRefreshKey)
   const schemas = useSchemaStore((s) => s.schemas)
   const openAdd = useModalStore((s) => s.openAdd)
@@ -421,23 +424,35 @@ export function MyContentPanel({ onClose }: { onClose: () => void }) {
 
                       return (
                         <div key={node.ref_id}>
-                          <div className="flex items-center group">
+                          <div className={cn("flex group", isMobile ? "items-start gap-2 px-3 py-2" : "items-center")}>
                             <div className="flex-1 min-w-0 overflow-hidden">
-                              <NodeRow
-                                node={node}
-                                schemas={schemas}
-                                onClick={() => { setSelectedNode(node); setSidebarSelectedNode(node) }}
-                                onMouseEnter={() => setHoveredNode(node)}
-                                onMouseLeave={() => setHoveredNode(null)}
-                                hideBoost={true}
-                                isAdmin={isAdmin}
-                                unlockCount={insight?.unlock_count}
-                                growthBadge={nodeBadge}
-                              />
+                              {isMobile ? (
+                                <NodeRadialCard
+                                  node={node}
+                                  schemas={schemas}
+                                  onOpen={(picked) => { setSelectedNode(picked); setSidebarSelectedNode(picked) }}
+                                />
+                              ) : (
+                                <NodeRow
+                                  node={node}
+                                  schemas={schemas}
+                                  onClick={() => { setSelectedNode(node); setSidebarSelectedNode(node) }}
+                                  onMouseEnter={() => setHoveredNode(node)}
+                                  onMouseLeave={() => setHoveredNode(null)}
+                                  hideBoost={true}
+                                  isAdmin={isAdmin}
+                                  unlockCount={insight?.unlock_count}
+                                  growthBadge={nodeBadge}
+                                />
+                              )}
                             </div>
                             {!isConfirming && (
                               <button
-                                className="shrink-0 pl-3 pr-3 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                                className={cn(
+                                  "shrink-0 pl-3 pr-3 transition-opacity text-muted-foreground hover:text-destructive",
+                                  // On touch there's no hover, so keep delete visible.
+                                  isMobile ? "opacity-100 pt-2" : "opacity-0 group-hover:opacity-100"
+                                )}
                                 onClick={(e) => { e.stopPropagation(); setDeletingId(node.ref_id); setDeleteError(null) }}
                                 aria-label="Delete node"
                               >
@@ -501,15 +516,25 @@ export function MyContentPanel({ onClose }: { onClose: () => void }) {
                   <div className="py-1">
                     {deduplicatedPurchased.map((node, i) => (
                       <div key={node.ref_id}>
-                        <NodeRow
-                          node={node}
-                          schemas={schemas}
-                          onClick={() => { setSelectedNode(node); setSidebarSelectedNode(node) }}
-                          onMouseEnter={() => setHoveredNode(node)}
-                          onMouseLeave={() => setHoveredNode(null)}
-                          hideBoost={true}
-                          isAdmin={isAdmin}
-                        />
+                        {isMobile ? (
+                          <div className="px-3 py-2">
+                            <NodeRadialCard
+                              node={node}
+                              schemas={schemas}
+                              onOpen={(picked) => { setSelectedNode(picked); setSidebarSelectedNode(picked) }}
+                            />
+                          </div>
+                        ) : (
+                          <NodeRow
+                            node={node}
+                            schemas={schemas}
+                            onClick={() => { setSelectedNode(node); setSidebarSelectedNode(node) }}
+                            onMouseEnter={() => setHoveredNode(node)}
+                            onMouseLeave={() => setHoveredNode(null)}
+                            hideBoost={true}
+                            isAdmin={isAdmin}
+                          />
+                        )}
                         {i < deduplicatedPurchased.length - 1 && (
                           <Separator className="bg-sidebar-border/50" />
                         )}

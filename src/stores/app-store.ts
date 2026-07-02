@@ -3,8 +3,13 @@
 import { create } from "zustand"
 
 // //
+export type MobileView = "list" | "graph"
+
 interface AppState {
   searchTerm: string
+  // Which surface fills the screen on mobile: the content list/sidebar, or the
+  // 3D graph canvas. No effect on desktop (both panes are always shown there).
+  mobileView: MobileView
   sidebarOpen: boolean
   myContentOpen: boolean
   sourcesOpen: boolean
@@ -19,6 +24,7 @@ interface AppState {
 
 interface AppActions {
   setSearchTerm: (val: string) => void
+  setMobileView: (val: MobileView) => void
   setSidebarOpen: (val: boolean) => void
   setMyContentOpen: (val: boolean) => void
   setSourcesOpen: (val: boolean) => void
@@ -40,6 +46,7 @@ export type AppStore = AppState & AppActions
 
 export const useAppStore = create<AppStore>((set) => ({
   searchTerm: "",
+  mobileView: "list",
   sidebarOpen: true,
   myContentOpen: false,
   sourcesOpen: false,
@@ -51,6 +58,7 @@ export const useAppStore = create<AppStore>((set) => ({
   graphDescription: "",
   myContentRefreshKey: 0,
   setSearchTerm: (searchTerm) => set({ searchTerm }),
+  setMobileView: (mobileView) => set({ mobileView }),
   setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
   setMyContentOpen: (myContentOpen) => set({ myContentOpen, sourcesOpen: false, clipsOpen: false, followingOpen: false, agentOpen: false, workflowsOpen: false }),
   setSourcesOpen: (sourcesOpen) => set({ sourcesOpen, myContentOpen: false, clipsOpen: false, followingOpen: false, agentOpen: false, workflowsOpen: false }),
